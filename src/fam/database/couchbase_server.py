@@ -1,4 +1,6 @@
 import copy
+
+
 ## little dance to use patch version if necessary
 
 def is_gevent_monkey_patched():
@@ -10,12 +12,13 @@ def is_gevent_monkey_patched():
         return monkey.is_module_patched('__builtin__')
 
 
+# needed for any cluster connection
+from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
-from couchbase.bucket import View
+# needed for options -- cluster, timeout, SQL++ (N1QL) query, etc.
+from couchbase.options import (ClusterOptions)
 from couchbase.n1ql import N1QLQuery
-from couchbase.exceptions import NotFoundError, KeyExistsError
-
+from couchbase.exceptions import *
 
 from fam.blud import FamObject
 from fam.database.base import BaseDatabase
@@ -25,16 +28,15 @@ from fam.exceptions import *
 
 class CouchbaseWrapper(BaseDatabase):
 
-    def __init__(self, mapper, host, bucket_name, read_only=True):
+    def __init__(self, mapper, host, bucket_name, username, password, scope, read_only=True):
         # connection_str = "couchbase://%s/%s" % (host, bucket_name)
         # self.bucket = Bucket(connection_str)
         self.read_only = read_only
         self.mapper = mapper
         # self.bucket_name = bucket_name
 
-
         cluster = Cluster('couchbase://%s' % host)
-        authenticator = PasswordAuthenticator('test', 'bollocks')
+        authenticator = PasswordAuthenticator(username, password)
         cluster.authenticate(authenticator)
         self.bucket = cluster.open_bucket(bucket_name)
 
@@ -50,10 +52,8 @@ class CouchbaseWrapper(BaseDatabase):
 
         self.ensure_design_doc(key, doc)
 
-
         ## relational indexes
         for namespace_name, namespace in self.mapper.namespaces.items():
-
             view_namespace = namespace_name.replace("/", "_")
             key = "_design/%s" % view_namespace
 
@@ -66,7 +66,6 @@ class CouchbaseWrapper(BaseDatabase):
             key = doc["_id"]
             self.ensure_design_doc(key, doc)
 
-
     def _raw_design_doc(self):
 
         design_doc = {
@@ -78,8 +77,6 @@ class CouchbaseWrapper(BaseDatabase):
         }
 
         return design_doc
-
-
 
     def ensure_design_doc(self, key, doc):
         if self.read_only:
@@ -107,6 +104,7 @@ class CouchbaseWrapper(BaseDatabase):
             print("************  updating designs ************")
             print("new_design: ", doc)
             self._set(key, doc, rev=None if existing is None else existing.rev)
+
     #
     # def view(self, name, *args, **kwargs):
     #
@@ -144,15 +142,13 @@ class CouchbaseWrapper(BaseDatabase):
     #         "AND (geo.lon BETWEEN $min_lon AND $max_lon "
     #     )
 
-
-
     def n1ql(self, query, with_revs=False, *args, **kwargs):
         return FamObject.n1ql(self, query, with_revs=with_revs, *args, **kwargs)
 
     def _get(self, key, class_name=None):
         try:
             result = self.bucket.get(key)
-        except NotFoundError as e:
+        except KeyspaceNotFoundException as e:
             return None
         return ResultWrapper(key, result.cas, result.value)
 
@@ -165,10 +161,8 @@ class CouchbaseWrapper(BaseDatabase):
             else:
                 result = self.bucket.upsert(key, value)
             return ResultWrapper(key, result.cas, value)
-        except KeyExistsError as e:
+        except KeyError as e:
             raise FamResourceConflict("key alreday exists in couchbase: %s - %s" % (key, e))
-
-
 
     def set_object(self, obj, rev=None):
 
@@ -191,7 +185,6 @@ class CouchbaseWrapper(BaseDatabase):
             results.append(ResultWrapper(row["id"], rev, row[bucket_name]))
 
         return results
-
 
     def _n1ql(self, query, *args, **kwargs):
         query = N1QLQuery(query, *args, **kwargs)
