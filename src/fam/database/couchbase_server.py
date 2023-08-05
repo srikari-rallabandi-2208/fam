@@ -1,5 +1,5 @@
 import copy
-
+from datetime import timedelta
 
 ## little dance to use patch version if necessary
 
@@ -34,13 +34,16 @@ class CouchbaseWrapper(BaseDatabase):
         self.read_only = read_only
         self.mapper = mapper
         # self.bucket_name = bucket_name
+        auth = PasswordAuthenticator(username, password)
+        cluster = Cluster("couchbase://localhost", ClusterOptions(auth))
+        # Wait until the cluster is ready for use.
+        cluster.wait_until_ready(timedelta(seconds=5))
+        self.bucket = cluster.bucket(bucket_name)
+        self.scope = self.bucket.scope(scope)
 
-        cluster = Cluster('couchbase://%s' % host)
-        authenticator = PasswordAuthenticator(username, password)
-        cluster.authenticate(authenticator)
-        self.bucket = cluster.open_bucket(bucket_name)
-
-        self.mapper = mapper
+    @classmethod
+    def setCollection(self,collection):
+        self.collection = collection
 
     def update_designs(self):
 
@@ -147,7 +150,7 @@ class CouchbaseWrapper(BaseDatabase):
 
     def _get(self, key, class_name=None):
         try:
-            result = self.bucket.get(key)
+            result = self.scope.collection(self.collection).get(key)
         except KeyspaceNotFoundException as e:
             return None
         return ResultWrapper(key, result.cas, result.value)

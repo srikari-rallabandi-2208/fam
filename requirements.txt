@@ -5,8 +5,11 @@ jsonschema
 mock
 pytz
 slimit
-ply==3.4
+ply==3.11
 firebase_admin
 six
 grpcio
 google-auth
+appengine-python-standard
+esprima
+jsbeautifier

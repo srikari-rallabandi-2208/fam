@@ -1,7 +1,9 @@
 import inspect
 import os
-from slimit import ast
-from slimit.parser import Parser
+#from slimit import ast
+#from slimit.parser import Parser
+import esprima
+import jsbeautifier
 
 from fam.blud import GenericObject, ReferenceFrom
 from fam.schema.validator import ModelValidator
@@ -128,36 +130,35 @@ class ClassMapper(object):
         with open(filepath) as f:
             js = f.read()
 
-        parser = Parser()
-        tree = parser.parse(js)
+        # Parse JavaScript code using esprima
+        tree = esprima.parseScript(js)
 
         views = {}
 
-        for node in tree:
-            if isinstance(node, ast.VarStatement):
-                for child in node.children():
-                    for grandchild in child.children():
-                        if isinstance(grandchild, ast.Identifier):
-                            view = {}
-                            view_name = grandchild.value
-                            views[view_name] = view
-                        if isinstance(grandchild, ast.Object):
-                            for named in grandchild.children():
-                                function_name = None
-                                function_body = None
-                                for kv in named.children():
-                                    if isinstance(kv, ast.Identifier) and kv.value in VIEW_FUNCTION_NAMES:
-                                        function_name = kv.value
-                                    if isinstance(kv, ast.FuncExpr):
-                                        function_body = kv.to_ecma()
-                                if function_name and function_body:
-                                    view[function_name] = function_body
-
+        for node in tree['body']:
+            if node['type'] == 'VariableDeclaration':
+                for declarator in node['declarations']:
+                    if declarator['id']['type'] == 'Identifier':
+                        view = {}
+                        view_name = declarator['id']['name']
+                        views[view_name] = view
+                    if declarator['init']['type'] == 'ObjectExpression':
+                        for prop in declarator['init']['properties']:
+                            function_name = None
+                            function_body = None
+                            if prop['key']['type'] == 'Identifier' and prop['key']['name'] in VIEW_FUNCTION_NAMES:
+                                function_name = prop['key']['name']
+                            if prop['value']['type'] == 'FunctionExpression':
+                                function_body = jsbeautifier.beautify(esprima.Syntax.generate(prop['value']), opts={
+                                    'indent_size': 2,
+                                    'indent_with_tabs': False,
+                                    'preserve_newlines': True,
+                                })
+                            if function_name and function_body:
+                                view[function_name] = function_body
 
         return {"_id": "_design/%s" % name,
                 "views": views}
-
-
 
     def get_design(self, namespace, namespace_name, foreign_key_str):
 
