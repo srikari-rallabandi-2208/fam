@@ -20,7 +20,7 @@ class MapperValidationTests(unittest.TestCase):
 
         mapper = ClassMapper([Dog, Cat, Person, JackRussell])
         validator = ModelValidator(None, classes=[Dog, Cat, Person, JackRussell])
-        self.db = CouchbaseWrapper(mapper, COUCHBASE_URL, COUCHBASE_BUCKET_NAME, username='Administrator',password='GU$dcRS4',scope=COUCHBASE_SCOPE_NAME,read_only=False)
+        self.db = CouchbaseWrapper(mapper, COUCHBASE_URL, COUCHBASE_BUCKET_NAME, username='Administrator',password='xxxxx',scope=COUCHBASE_SCOPE_NAME,read_only=False)
         self.db.setCollection("pets")
         self.db.update_designs()
 
